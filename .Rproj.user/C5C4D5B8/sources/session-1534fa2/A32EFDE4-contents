@@ -1,0 +1,433 @@
+# -------------------------------
+# Load required packages
+# -------------------------------
+library(tidyverse)
+
+# -------------------------------
+# 1️⃣ Read the dataset
+# -------------------------------
+data <- read.csv("API_JPN_DS2_en_csv_v2_9334.csv", skip = 4)  # Skip first 4 lines (World Bank metadata)
+
+# -------------------------------
+# 2️⃣ Define required indicators
+# -------------------------------
+indicators <- c(
+  "Population, total",                              # SP.POP.TOTL
+  "Life expectancy at birth, total (years)",        # SP.DYN.LE00.IN
+  "Fertility rate, total (births per woman)",       # SP.DYN.TFRT.IN
+  "Infant mortality rate (per 1,000 live births)",  # SP.DYN.IMRT.IN
+  "Hospital beds (per 1,000 people)",               # SH.MED.BEDS.ZS
+  "Current health expenditure (% of GDP)" , 
+  "Mortality rate, infant (per 1,000 live births)" ,
+  "Mortality rate, infant, female (per 1,000 live births)",
+  "Mortality rate, infant, male (per 1,000 live births)",
+  "Population, male",
+  "Population, female",
+  "Population growth (annual %)"# SH.XPD.CHEX.GD.ZS
+)
+
+# -------------------------------
+# 3️⃣ Filter for Japan and selected indicators
+# -------------------------------
+japan_data <- data %>%
+  filter(
+    Country.Name == "Japan",
+    Indicator.Name %in% indicators
+  )
+
+# -------------------------------
+# 4️⃣ Select only relevant columns (1990–2024)
+# -------------------------------
+japan_selected <- japan_data %>%
+  select(Country.Name, Indicator.Name, `X1990`:`X2024`)
+
+# -------------------------------
+# 5️⃣ Convert to long format for analysis
+# -------------------------------
+japan_long <- japan_selected %>%
+  pivot_longer(
+    cols = `X1990`:`X2024`,
+    names_to = "Year",
+    values_to = "Value"
+  )
+
+# -------------------------------
+# 6️⃣ (Optional) Spread to wide format per year for comparison
+# -------------------------------
+japan_wide <- japan_long %>%
+  pivot_wider(
+    names_from = Indicator.Name,
+    values_from = Value
+  )
+
+# -------------------------------
+# 7️⃣ View the result
+# -------------------------------
+head(japan_wide)
+view(japan_wide)
+
+
+# -------------------------------
+# 8️⃣ Convert Year to numeric
+# -------------------------------
+japan_wide$Year <- as.numeric(gsub("X", "", japan_wide$Year))
+
+# -------------------------------
+# 9️⃣ Basic summary statistics
+# -------------------------------
+summary(japan_wide)
+
+# Correlation matrix between numeric indicators
+japan_cor <- japan_wide %>%
+  select(-Country.Name, -Year) %>%
+  cor(use = "pairwise.complete.obs")
+
+print(japan_cor)
+# -------------------------------
+# 📊 Correlation Heatmap (ggplot2)
+# -------------------------------
+library(reshape2)
+library(ggplot2)
+
+# Convert matrix to long format for ggplot
+japan_cor_long <- melt(japan_cor)
+
+# Plot
+ggplot(japan_cor_long, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",
+                       midpoint = 0, limit = c(-1,1),
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  labs(title = "Correlation Heatmap of Japan Health & Demographic Indicators")
+
+#population trend
+ggplot(japan_wide, aes(x = Year, y = `Population, total`)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "Population Growth in Japan (1990–2024)",
+       y = "Population", x = "Year") +
+  theme_minimal()
+
+# life expectancy over time
+ggplot(japan_wide, aes(x = Year, y = `Life expectancy at birth, total (years)`)) +
+  geom_line(color = "darkgreen", size = 1) +
+  labs(title = "Life Expectancy in Japan (1990–2024)",
+       y = "Years", x = "Year") +
+  theme_minimal()
+
+#health expenditure vs life expectancy
+ggplot(japan_wide, aes(x = `Current health expenditure (% of GDP)`,
+                       y = `Life expectancy at birth, total (years)`)) +
+  geom_point(color = "purple") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Health Expenditure vs Life Expectancy",
+       x = "Health Expenditure (% of GDP)", y = "Life Expectancy (years)") +
+  theme_minimal()
+
+#population growth and life expectancy
+ggplot(japan_wide, aes(x = `Population, total`, y = `Life expectancy at birth, total (years)`)) +
+  geom_point(color = "darkblue") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Population vs. Life Expectancy in Japan (1990–2024)",
+       x = "Population (Total)",
+       y = "Life Expectancy (Years)") +
+  theme_minimal()
+
+#male and female population trend(compare  gender population over time)
+ggplot(japan_wide) +
+  geom_line(aes(x = Year, y = `Population, male`, color = "Male"), size = 1) +
+  geom_line(aes(x = Year, y = `Population, female`, color = "Female"), size = 1) +
+  labs(title = "Male vs Female Population in Japan (1990–2024)",
+       y = "Population", x = "Year", color = "Gender") +
+  theme_minimal()
+
+# compare infant mortallity trends by gender
+
+ggplot(japan_wide) +
+  geom_line(aes(x = Year, y = `Mortality rate, infant (per 1,000 live births)`, color = "Total"), size = 1) +
+  geom_line(aes(x = Year, y = `Mortality rate, infant, male (per 1,000 live births)`, color = "Male"), size = 1) +
+  geom_line(aes(x = Year, y = `Mortality rate, infant, female (per 1,000 live births)`, color = "Female"), size = 1) +
+  labs(title = "Infant Mortality Rates in Japan (1990–2024)",
+       y = "Deaths per 1,000 live births", x = "Year", color = "Category") +
+  theme_minimal()
+
+# hospital beds vs life expectancy (test if better health care access links to longer lives)
+ggplot(japan_wide, aes(x = `Hospital beds (per 1,000 people)`,
+                       y = `Life expectancy at birth, total (years)`)) +
+  geom_point(color = "darkgreen", size = 2) +
+  geom_smooth(method = "lm", color = "orange", se = FALSE) +
+  labs(title = "Hospital Beds vs. Life Expectancy in Japan",
+       x = "Hospital Beds (per 1,000 people)", y = "Life Expectancy (Years)") +
+  theme_minimal()
+
+# health expenditure over time
+ggplot(japan_wide, aes(x = Year, y = `Current health expenditure (% of GDP)`)) +
+  geom_line(color = "purple", size = 1) +
+  labs(title = "Health Expenditure (% of GDP) in Japan (1990–2024)",
+       y = "Health Expenditure (% of GDP)", x = "Year") +
+  theme_minimal()
+
+# population growth rate over time
+
+ggplot(japan_wide, aes(x = Year, y = `Population growth (annual %)`)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Population Growth Rate in Japan (1990–2024)",
+       y = "Annual Growth (%)", x = "Year") +
+  theme_minimal()
+
+
+library(patchwork)
+
+p1 <- ggplot(japan_wide, aes(Year, `Population, total`)) + geom_line(color="blue") + labs(title="Population")
+p2 <- ggplot(japan_wide, aes(Year, `Life expectancy at birth, total (years)`)) + geom_line(color="green") + labs(title="Life Expectancy")
+p3 <- ggplot(japan_wide, aes(Year, `Current health expenditure (% of GDP)`)) + geom_line(color="purple") + labs(title="Health Expenditure")
+p4 <- ggplot(japan_wide, aes(Year, `Fertility rate, total (births per woman)`)) + geom_line(color="red") + labs(title="Fertility Rate")
+
+(p1 | p2) / (p3 | p4) + plot_annotation(title = "Japan Health & Demographic Overview (1990–2024)")
+
+#shiny
+# -------------------------------
+# 10️⃣ Shiny Dashboard Setup
+# -------------------------------
+library(shiny)
+library(plotly)
+library(bslib)
+
+
+# ------------------------------------------------------------
+# Load libraries
+# ------------------------------------------------------------
+library(shiny)
+library(tidyverse)
+library(plotly)
+library(patchwork)
+library(reshape2)
+library(corrplot)
+
+
+
+
+
+# ------------------------------------------------------------
+# UI: Layout with multiple tabs
+# ------------------------------------------------------------
+ui <- navbarPage(
+  title = " Japan Health & Demographic Dashboard",
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "cosmo",  # options: cosmo, flatly, minty, litera, lumen
+    base_font = font_google("Poppins"),
+    heading_font = font_google("Nunito Sans")
+  ),
+  
+  
+  # 1️⃣ Demographic Trends
+  tabPanel("Demographics",
+           sidebarLayout(
+             sidebarPanel(
+               selectInput("demo_indicator", "Select Indicator:",
+                           choices = c("Population, total",
+                                       "Population, male",
+                                       "Population, female",
+                                       "Population growth (annual %)"),
+                           selected = "Population, total"),
+               sliderInput("year_gender", "Select Year for Gender Chart:",
+                           min = min(japan_wide$Year),
+                           max = max(japan_wide$Year),
+                           value = max(japan_wide$Year),
+                           step = 1,
+                           sep = "")
+             ),
+             mainPanel(
+               tabsetPanel(
+                 tabPanel("Population Trend",
+                          plotlyOutput("demoPlot"),
+                          textOutput("populationText")
+                 ),
+                 tabPanel("Gender Composition",
+                          plotlyOutput("genderPie"),
+                          textOutput("genderText")
+                 )
+               )
+             )
+           )
+  ),
+  
+  # 2️⃣ Life Expectancy & Fertility
+  tabPanel("Life Expectancy & Fertility",
+           fluidPage(
+             plotlyOutput("lifePlot"),
+             br(),
+             plotlyOutput("fertilityPlot")
+           )
+  ),
+  
+  # 3️⃣ Health Expenditure & Hospital Beds
+  tabPanel("Health Indicators",
+           fluidPage(
+             plotlyOutput("healthSpendPlot"),
+             br(),
+             plotlyOutput("hospitalPlot")
+           )
+  ),
+  
+  # 4️⃣ Mortality Trends
+  tabPanel("Mortality",
+           fluidPage(
+             plotlyOutput("mortalityPlot")
+           )
+  ),
+  
+  # 5️⃣ Correlation Heatmap
+  tabPanel("Correlation Heatmap",
+           fluidPage(
+             plotOutput("corrHeatmap"),
+             br(),
+             plotOutput("corrplot")
+           )
+  )
+)
+
+# -------------------------------
+# SERVER
+# -------------------------------
+server <- function(input, output) {
+  
+  # 1️⃣ Demographic trends
+  output$demoPlot <- renderPlotly({
+    plot_ly(data = japan_wide,
+            x = ~Year,
+            y = as.formula(paste0("~`", input$demo_indicator, "`")),
+            type = 'scatter', mode = 'lines+markers',
+            line = list(color = 'blue')) %>%
+      layout(title = paste(input$demo_indicator, "in Japan (1990–2024)"),
+             xaxis = list(title = "Year"),
+             yaxis = list(title = input$demo_indicator))
+  })
+  
+  output$populationText <- renderText({
+    latest <- japan_wide %>% filter(Year == max(Year))
+    paste0("In ", max(japan_wide$Year), ", total population was ",
+           format(latest$`Population, total`, big.mark = ","), ".")
+  })
+  
+  # Gender Pie Chart
+  output$genderPie <- renderPlotly({
+    df <- japan_wide %>% filter(Year == input$year_gender)
+    gender_data <- data.frame(
+      Gender = c("Male", "Female"),
+      Population = c(df$`Population, male`, df$`Population, female`)
+    )
+    
+    plot_ly(gender_data,
+            labels = ~Gender,
+            values = ~Population,
+            type = 'pie',
+            textinfo = 'label+percent',
+            insidetextorientation = 'radial') %>%
+      layout(title = paste("Population by Gender -", input$year_gender))
+  })
+  
+  output$genderText <- renderText({
+    df <- japan_wide %>% filter(Year == input$year_gender)
+    paste0("In ", input$year_gender, ", Male Population: ",
+           round(df$`Population, male`/1e6,2), " million | Female Population: ",
+           round(df$`Population, female`/1e6,2), " million.")
+  })
+  
+  # 2️⃣ Life Expectancy & Fertility
+  output$lifePlot <- renderPlotly({
+    plot_ly(japan_wide, x = ~Year,
+            y = ~`Life expectancy at birth, total (years)`,
+            type = 'scatter', mode = 'lines', name = 'Life Expectancy',
+            line = list(color = 'green')) %>%
+      layout(title = "Life Expectancy in Japan (1990–2024)",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Years"))
+  })
+  
+  output$fertilityPlot <- renderPlotly({
+    plot_ly(japan_wide, x = ~Year,
+            y = ~`Fertility rate, total (births per woman)`,
+            type = 'scatter', mode = 'lines', name = 'Fertility Rate',
+            line = list(color = 'red')) %>%
+      layout(title = "Fertility Rate in Japan (1990–2024)",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Births per Woman"))
+  })
+  
+  # 3️⃣ Health Indicators
+  output$healthSpendPlot <- renderPlotly({
+    plot_ly(japan_wide, x = ~Year,
+            y = ~`Current health expenditure (% of GDP)`,
+            type = 'scatter', mode = 'lines', name = 'Health Expenditure',
+            line = list(color = 'purple')) %>%
+      layout(title = "Health Expenditure (% of GDP)",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Health Expenditure (% of GDP)"))
+  })
+  
+  output$hospitalPlot <- renderPlotly({
+    plot_ly(japan_wide, x = ~Year,
+            y = ~`Hospital beds (per 1,000 people)`,
+            type = 'scatter', mode = 'lines', name = 'Hospital Beds',
+            line = list(color = 'orange')) %>%
+      layout(title = "Hospital Beds per 1,000 People",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Beds per 1,000 People"))
+  })
+  
+  # 4️⃣ Mortality Trends
+  output$mortalityPlot <- renderPlotly({
+    plot_ly(japan_wide, x = ~Year,
+            y = ~`Mortality rate, infant (per 1,000 live births)`,
+            name = "Total", type = 'scatter', mode = 'lines', line = list(color = 'black')) %>%
+      add_trace(y = ~`Mortality rate, infant, male (per 1,000 live births)`, name = "Male", line = list(color = 'blue')) %>%
+      add_trace(y = ~`Mortality rate, infant, female (per 1,000 live births)`, name = "Female", line = list(color = 'red')) %>%
+      layout(title = "Infant Mortality Rates (1990–2024)",
+             xaxis = list(title = "Year"),
+             yaxis = list(title = "Deaths per 1,000 live births"))
+  })
+  
+  # 5️⃣ Correlation Heatmap
+  output$corrHeatmap <- renderPlot({
+    japan_cor <- japan_wide %>%
+      select(-Country.Name, -Year) %>%
+      cor(use = "pairwise.complete.obs")
+    
+    japan_cor_long <- melt(japan_cor)
+    
+    ggplot(japan_cor_long, aes(x = Var1, y = Var2, fill = value)) +
+      geom_tile(color = "white") +
+      scale_fill_gradient2(low = "blue", high = "red", mid = "white",
+                           midpoint = 0, limit = c(-1,1), name = "Correlation") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank()) +
+      labs(title = "Correlation Heatmap of Japan Indicators")
+  })
+  
+  output$corrplot <- renderPlot({
+    japan_cor <- japan_wide %>%
+      select(-Country.Name, -Year) %>%
+      cor(use = "pairwise.complete.obs")
+    
+    corrplot(japan_cor, method = "color", type = "upper",
+             tl.col = "black", tl.srt = 45,
+             addCoef.col = "black",
+             col = colorRampPalette(c("blue", "white", "red"))(200),
+             mar = c(0,0,2,0))
+  })
+}
+
+# -------------------------------
+# Launch App
+# -------------------------------
+shinyApp(ui, server)
+
+
