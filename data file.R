@@ -34,7 +34,7 @@ indicators <- c(
 )
 
 # -------------------------------
-#  Filter for Japan and selected indicators
+#  Filter for Japan and selected indicators afiokagfoial
 # -------------------------------
 japan_data <- data %>%
   filter(
